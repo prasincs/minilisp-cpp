@@ -14,36 +14,84 @@ This project implements a minimal Lisp interpreter (similar to McCarthy's origin
 
 ## Building
 
-### Using Make (with clang++)
+### Build Options
+
+This project offers three build configurations with different size/portability trade-offs:
+
+| Build Target | Size | I/O | Compatibility | Command |
+|--------------|------|-----|---------------|---------|
+| **Default** | ~39KB | iostream | All platforms | `make` |
+| **Small** | ~36KB | iostream | All platforms | `make small` |
+| **Ultra-small** | ~34KB (macOS)<br>~10KB (Linux+UPX) | POSIX | macOS/Linux only | `make ultra-small` |
+
+#### Default Build (Recommended)
 
 ```bash
-make
+make              # Build with standard optimizations
+make run          # Build and run the REPL
+make clean        # Remove build artifacts
 ```
 
-To build and run:
+- **Size**: ~39KB
+- **Optimization**: -O2 (balanced speed/size)
+- **Features**: Full iostream, exception handling
+- **Compatibility**: Cross-platform (Windows/macOS/Linux)
+
+#### Small Build
 
 ```bash
-make run
+make small
 ```
 
-To clean build artifacts:
+- **Size**: ~36KB (7% smaller)
+- **Optimization**: -Os + LTO + strip
+- **Features**: Full iostream, exception handling
+- **Compatibility**: Cross-platform (Windows/macOS/Linux)
+- **Trade-offs**: Slightly slower than default (~3%), but still fully portable
+
+#### Ultra-Small Build
 
 ```bash
-make clean
+make ultra-small
 ```
+
+- **Size**: ~34KB on macOS (~12% smaller), **10KB on Linux with UPX**
+- **Optimization**: -Os + LTO + MINIMAL_BUILD + POSIX I/O
+- **Features**: POSIX I/O (no iostream), reduced exception support
+- **Compatibility**: **POSIX only** (macOS/Linux, not Windows)
+- **Trade-offs**: Uses raw POSIX `write()`/`read()` instead of iostream
+
+**Note**: On Linux, `make ultra-small` automatically applies UPX compression (NRV algorithm), reducing the binary from 66KB to **10KB** on disk. UPX's default NRV compression outperforms LZMA for small binaries!
+
+#### Cross-Compiling for Linux (from macOS)
+
+Build a Linux binary using Docker:
+
+```bash
+./build-linux.sh
+```
+
+This produces a Linux ARM64 binary with UPX NRV compression (~10KB). Requires Docker.
 
 ### Manual Build
 
 Using clang++:
 
 ```bash
+# Default
 clang++ -std=c++20 -Wall -Wextra -O2 -o lisp_repl main.cpp
+
+# Small
+clang++ -std=c++20 -Os -flto -o lisp_repl main.cpp && strip lisp_repl
+
+# Ultra-small
+clang++ -std=c++20 -Os -flto -DMINIMAL_BUILD -o lisp_repl main.cpp && strip lisp_repl
 ```
 
 Using g++:
 
 ```bash
-g++ -std=c++20 -Wall -Wextra -O2 -o lisp_repl main.cpp
+clang++ -std=c++20 -Wall -Wextra -O2 -o lisp_repl main.cpp
 ```
 
 ## Usage

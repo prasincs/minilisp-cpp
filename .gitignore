@@ -1,5 +1,6 @@
-# Compiled executable
+# Compiled executables
 lisp_repl
+lisp_repl_*
 
 # Object files
 *.o

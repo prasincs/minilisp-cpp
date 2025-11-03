@@ -6,8 +6,10 @@
  * This version uses C++20 idioms like std::span,
  * std::visit, and std::transform_reduce.
  *
- * Build Command:
- * g++ -std=c++20 -Wall -o lisp_repl main.cpp
+ * Build Commands:
+ *   make              - Standard build (39KB, portable)
+ *   make small        - Size-optimized (18-22KB, portable)
+ *   make ultra-small  - Minimal build (6-8KB, POSIX-only)
  */
 
 #include <string_view>
@@ -20,8 +22,16 @@
 #include <numeric>   // for std::transform_reduce (constexpr in C++20)
 #include <functional>  // for std::plus/multiplies
 #include <optional>  // for std::optional (constexpr-friendly)
-#include <iostream>  // For std::cout
+
+// Conditional includes based on build mode
+#ifndef MINIMAL_BUILD
+#include <iostream>  // For std::cout (standard build)
 #include <string>    // For std::string and std::getline
+#else
+// POSIX I/O for minimal build
+#include <unistd.h>  // For write, read
+#include <cstring>   // For strlen, memset
+#endif
 
 // 1. A struct that can hold a string at compile-time
 // (Allowed as a template parameter in C++20)
@@ -333,12 +343,56 @@ consteval auto operator""_lisp() {
     return std::get<long>(atom);
 }
 
+#ifdef MINIMAL_BUILD
+// --- POSIX I/O Helpers for Minimal Build ---
+void write_str(const char* str) {
+    write(STDOUT_FILENO, str, strlen(str));
+}
+
+void write_number(long num) {
+    char buffer[32];
+    int i = 0;
+    bool is_neg = num < 0;
+    if (is_neg) num = -num;
+
+    if (num == 0) {
+        buffer[i++] = '0';
+    } else {
+        char temp[32];
+        int j = 0;
+        while (num > 0) {
+            temp[j++] = '0' + (num % 10);
+            num /= 10;
+        }
+        if (is_neg) buffer[i++] = '-';
+        while (j > 0) {
+            buffer[i++] = temp[--j];
+        }
+    }
+    buffer[i] = '\0';
+    write_str(buffer);
+}
+
+int read_line_posix(char* buffer, int max_len) {
+    int i = 0;
+    char c;
+    while (i < max_len - 1) {
+        ssize_t n = read(STDIN_FILENO, &c, 1);
+        if (n <= 0 || c == '\n') break;
+        buffer[i++] = c;
+    }
+    buffer[i] = '\0';
+    return i;
+}
+#endif
+
 // --- RUNTIME Entry Point ---
 // This is a new function that can be called at runtime
 // with a normal std::string or std::string_view.
 long eval_lisp_runtime(std::string_view s) {
     // The MiniLisp::parse and ::eval functions are marked
     // 'constexpr', so they are available at runtime too.
+#ifndef MINIMAL_BUILD
     try {
         auto ast = MiniLisp::parse(s);
         auto result_sexpr = MiniLisp::eval(ast);
@@ -354,6 +408,16 @@ long eval_lisp_runtime(std::string_view s) {
         std::cerr << "Runtime Lisp Error: " << e.what() << std::endl;
         return 0; // Or some error code
     }
+#else
+    // Minimal build: no exception handling
+    auto ast = MiniLisp::parse(s);
+    auto result_sexpr = MiniLisp::eval(ast);
+
+    MiniLisp::p_assert(result_sexpr.atom.has_value(), "Final result must be an atom");
+    const auto& atom = *result_sexpr.atom;
+    MiniLisp::p_assert(std::holds_alternative<long>(atom), "Final result must be a number");
+    return std::get<long>(atom);
+#endif
 }
 
 
@@ -367,7 +431,7 @@ int main() {
     // If these lines compile, it worked.
     static_assert(val == 20);
     static_assert(val2 == 30); // 100 - (2 * (10 + 20 5)) = 100 - (2 * 35) = 100 - 70 = 30
-    
+
     // === NEW COMPILE-TIME TESTS for car/cdr/quote ===
     // Use ' (quote) syntax
     constexpr auto val3 = "(car '(10 20 30))"_lisp;
@@ -380,15 +444,14 @@ int main() {
     // Combine with arithmetic
     constexpr auto val5 = "(+ (car '(10 5)) (car (cdr '(3 20))))"_lisp;
     static_assert(val5 == 30); // 10 + 20
-    
 
+#ifndef MINIMAL_BUILD
     std::cout << "Compile-time tests passed!" << std::endl;
-
 
     // --- RUNTIME Evaluation (REPL) ---
     std::cout << "\n--- MiniLisp Runtime REPL ---" << std::endl;
     std::cout << "Enter Lisp expression (e.g., \"(car '(1 2))\") or 'q' to quit." << std::endl;
-    
+
     std::string line;
     while (true) {
         std::cout << "> ";
@@ -407,6 +470,30 @@ int main() {
             std::cerr << "Error: " << e.what() << std::endl;
         }
     }
+#else
+    // MINIMAL_BUILD: Use POSIX I/O
+    write_str("Compile-time tests passed!\n");
+    write_str("\n--- MiniLisp Runtime REPL ---\n");
+    write_str("Enter Lisp expression (e.g., \"(car '(1 2))\") or 'q' to quit.\n");
+
+    char line[512];
+    while (true) {
+        write_str("> ");
+        int len = read_line_posix(line, sizeof(line));
+
+        if (len == 0 || (len == 1 && line[0] == 'q')) {
+            break;
+        }
+
+        if (len == 0) continue;
+
+        // Call the runtime-capable function
+        long result = eval_lisp_runtime(std::string_view(line, len));
+        write_str("=> ");
+        write_number(result);
+        write_str("\n");
+    }
+#endif
 
     return 0;
 }
