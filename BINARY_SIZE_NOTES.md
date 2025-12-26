@@ -174,7 +174,7 @@ The Linux binary is **67% smaller** with UPX compression!
 
 ## WebAssembly Build
 
-We also support building to WebAssembly for running in the browser:
+The project also supports building to WebAssembly for running in the browser:
 
 ```bash
 make wasm
@@ -183,7 +183,7 @@ make wasm
 
 ### Why wasi-sdk Instead of Emscripten?
 
-We chose **wasi-sdk** over Emscripten for several reasons:
+I chose **wasi-sdk** over Emscripten for several reasons:
 
 | Aspect | wasi-sdk | Emscripten |
 |--------|----------|------------|
@@ -196,7 +196,7 @@ wasi-sdk produces a single `.wasm` file with no JavaScript runtime bloat.
 
 ### Why Not Bare Clang with -nostdlib?
 
-We initially tried the smallest possible approach:
+I initially tried the smallest possible approach:
 
 ```bash
 clang++ --target=wasm32 -nostdlib -Wl,--no-entry ...
@@ -204,10 +204,10 @@ clang++ --target=wasm32 -nostdlib -Wl,--no-entry ...
 
 This failed because:
 1. `-nostdlib` removes access to `<string_view>`, `<vector>`, `<variant>`, etc.
-2. Our interpreter relies heavily on the C++ standard library
+2. The interpreter relies heavily on the C++ standard library
 3. Would require reimplementing these types from scratch
 
-**The trade-off**: wasi-sdk adds ~30KB of libc (dlmalloc, etc.) but gives us full C++20 stdlib support. For a more minimal interpreter written without STL, bare WASM could achieve ~10KB.
+**The trade-off**: wasi-sdk adds ~30KB of libc (dlmalloc, etc.) but provides full C++20 stdlib support. For a more minimal interpreter written without STL, bare WASM could achieve ~10KB.
 
 ### Build Flags
 
@@ -219,11 +219,11 @@ WASMFLAGS := -std=c++20 -Os -fno-exceptions \
 Key choices:
 - `-fno-exceptions`: Reduces binary size, uses `__builtin_trap()` for errors
 - `-Wl,--no-entry`: Library mode (no `main()`)
-- `-Wl,--export-dynamic`: Export our `eval` function
+- `-Wl,--export-dynamic`: Export the `eval` function
 
 ### The WASI Shim
 
-wasi-sdk's libc (dlmalloc) requires WASI syscalls. For browser use, we provide a minimal shim:
+wasi-sdk's libc (dlmalloc) requires WASI syscalls. For browser use, a minimal shim is needed:
 
 ```javascript
 const wasi = {
@@ -295,7 +295,7 @@ The ultra-small build **works brilliantly** - we removed iostream and reduced ac
 | Linux (ELF) | 66KB | Uncompressed native |
 
 **Key findings:**
-1. We successfully minimized the **actual code** (7-11KB of executable code)
+1. I successfully minimized the **actual code** (7-11KB of executable code)
 2. Binary format overhead varies wildly by platform
 3. **macOS Mach-O is actually smaller** than Linux ELF before compression
 4. **UPX NRV compression on Linux** achieves the smallest native size (10KB)
