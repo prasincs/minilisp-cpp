@@ -172,6 +172,96 @@ Linux (UPX):     11,528 bytes (11.5KB) compressed ✨
 
 The Linux binary is **67% smaller** with UPX compression!
 
+## WebAssembly Build
+
+We also support building to WebAssembly for running in the browser:
+
+```bash
+make wasm
+# Result: 41,269 bytes (41KB)
+```
+
+### Why wasi-sdk Instead of Emscripten?
+
+We chose **wasi-sdk** over Emscripten for several reasons:
+
+| Aspect | wasi-sdk | Emscripten |
+|--------|----------|------------|
+| **Output** | Pure .wasm | .wasm + .js runtime |
+| **Size** | 41KB | ~100KB+ (with JS glue) |
+| **Complexity** | Minimal | Full runtime, filesystem emulation |
+| **Modern** | WASI standard | Legacy approach |
+
+wasi-sdk produces a single `.wasm` file with no JavaScript runtime bloat.
+
+### Why Not Bare Clang with -nostdlib?
+
+We initially tried the smallest possible approach:
+
+```bash
+clang++ --target=wasm32 -nostdlib -Wl,--no-entry ...
+```
+
+This failed because:
+1. `-nostdlib` removes access to `<string_view>`, `<vector>`, `<variant>`, etc.
+2. Our interpreter relies heavily on the C++ standard library
+3. Would require reimplementing these types from scratch
+
+**The trade-off**: wasi-sdk adds ~30KB of libc (dlmalloc, etc.) but gives us full C++20 stdlib support. For a more minimal interpreter written without STL, bare WASM could achieve ~10KB.
+
+### Build Flags
+
+```makefile
+WASMFLAGS := -std=c++20 -Os -fno-exceptions \
+             -Wl,--no-entry -Wl,--export-dynamic
+```
+
+Key choices:
+- `-fno-exceptions`: Reduces binary size, uses `__builtin_trap()` for errors
+- `-Wl,--no-entry`: Library mode (no `main()`)
+- `-Wl,--export-dynamic`: Export our `eval` function
+
+### The WASI Shim
+
+wasi-sdk's libc (dlmalloc) requires WASI syscalls. For browser use, we provide a minimal shim:
+
+```javascript
+const wasi = {
+    args_get: () => 0, args_sizes_get: () => 0,
+    proc_exit: () => {}, fd_write: () => 0,
+    fd_read: () => 0, fd_close: () => 0,
+    fd_seek: () => 0, fd_fdstat_get: () => 0,
+    environ_sizes_get: () => 0, environ_get: () => 0,
+    clock_time_get: () => 0,
+};
+
+const { instance } = await WebAssembly.instantiate(wasmBytes,
+    { wasi_snapshot_preview1: wasi });
+```
+
+### Size Comparison (All Platforms)
+
+| Platform | Size | Notes |
+|----------|------|-------|
+| macOS (Mach-O) | 35KB | Stripped, 16KB page alignment |
+| Linux (ELF) | 66KB | Stripped, more metadata |
+| Linux + UPX | **10KB** | Best native size! |
+| **WASM** | **41KB** | Portable, runs in browser |
+
+### Trade-offs
+
+**WASM Advantages:**
+- Runs anywhere (browser, Node.js, Wasmtime)
+- Sandboxed execution
+- No recompilation needed per platform
+
+**WASM Disadvantages:**
+- Larger than UPX-compressed Linux (41KB vs 10KB)
+- Requires WASI shim for browser
+- Slightly slower than native (~1.5-2x)
+
+For an interactive blog demo, 41KB is excellent - it loads instantly and runs the same everywhere.
+
 ## Key Takeaways
 
 1. **Binary format matters more than you think**
@@ -196,19 +286,26 @@ The Linux binary is **67% smaller** with UPX compression!
 
 The ultra-small build **works brilliantly** - we removed iostream and reduced actual code by 32%.
 
-**Surprising findings:**
-- macOS (Mach-O): **35KB** - more efficient than expected!
-- Linux (ELF): **66KB** - larger due to metadata overhead
-- Linux + UPX (NRV): **10.0KB** - compression wins! ✨
+**Size summary across all targets:**
+| Target | Size | Use Case |
+|--------|------|----------|
+| Linux + UPX | **10KB** | Smallest native binary |
+| macOS | 35KB | Development machine |
+| **WASM** | **41KB** | Browser/portable |
+| Linux (ELF) | 66KB | Uncompressed native |
 
-The real win isn't the file size - it's understanding that:
+**Key findings:**
 1. We successfully minimized the **actual code** (7-11KB of executable code)
 2. Binary format overhead varies wildly by platform
 3. **macOS Mach-O is actually smaller** than Linux ELF before compression
-4. **UPX NRV compression on Linux** achieves the smallest size (10.0KB)
-5. **LZMA isn't always best** - for small binaries, NRV beats LZMA by 11%!
+4. **UPX NRV compression on Linux** achieves the smallest native size (10KB)
+5. **WASM with wasi-sdk** provides the best portability at 41KB
+6. **LZMA isn't always best** - for small binaries, NRV beats LZMA by 11%!
 
-The lesson: **understand your platform's binary format** before obsessing over executable size. Sometimes the "inefficient" format (Mach-O) produces smaller binaries than the "efficient" one (ELF)!
+The lesson: **choose your target based on your use case**:
+- Need smallest binary? → Linux + UPX (10KB)
+- Need browser support? → WASM (41KB)
+- Need universal portability? → WASM runs everywhere
 
 ---
 
