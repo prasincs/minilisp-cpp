@@ -26,8 +26,11 @@ jobs:
           tar xzf wasi-sdk-24.0-x86_64-linux.tar.gz
           sudo mv wasi-sdk-24.0-x86_64-linux /opt/wasi-sdk
 
+      - name: Install binaryen
+        run: sudo apt-get update && sudo apt-get install -y binaryen
+
       - name: Build WASM
-        run: make wasm
+        run: make wasm-small
 
       - name: Prepare pages
         run: |

@@ -84,9 +84,16 @@ wasm:
 	$(WASMCXX) $(WASMFLAGS) -o lisp.wasm wasm.cpp
 	@ls -lh lisp.wasm | awk '{print "WASM size: " $$5}'
 
+# Build size-optimized WebAssembly module
+.PHONY: wasm-small
+wasm-small: wasm
+	@command -v wasm-opt >/dev/null 2>&1 || { echo "Error: wasm-opt not found. Install binaryen: brew install binaryen"; exit 1; }
+	wasm-opt -Oz --strip-debug --strip-producers lisp.wasm -o lisp.wasm
+	@ls -lh lisp.wasm | awk '{print "WASM size (optimized): " $$5}'
+
 # Serve the WASM demo locally
 .PHONY: serve
-serve: wasm
+serve: wasm-small
 	@echo "Serving at http://localhost:8000"
 	python3 -m http.server 8000
 
@@ -127,7 +134,8 @@ help:
 	@echo "  make small        - Size-optimized build (~18-22KB, portable, LTO)"
 	@echo "  make ultra-small  - Ultra-minimal build (~6-8KB w/UPX, POSIX-only)"
 	@echo "  make wasm         - WebAssembly build (wasi-sdk)"
-	@echo "  make serve        - Build WASM and serve demo at localhost:8000"
+	@echo "  make wasm-small   - Size-optimized WASM (requires binaryen)"
+	@echo "  make serve        - Build optimized WASM and serve demo at localhost:8000"
 	@echo "  make debug        - Build with debug symbols"
 	@echo "  make run          - Build and run the REPL"
 	@echo "  make test         - Build and run compile-time tests"

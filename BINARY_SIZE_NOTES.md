@@ -221,6 +221,25 @@ Key choices:
 - `-Wl,--no-entry`: Library mode (no `main()`)
 - `-Wl,--export-dynamic`: Export the `eval` function
 
+### Optimizing with wasm-opt
+
+The Binaryen toolkit's `wasm-opt` can further reduce WASM size:
+
+```bash
+# Install: brew install binaryen
+wasm-opt -Oz --strip-debug --strip-producers lisp.wasm -o lisp.wasm
+```
+
+**Results:**
+| Stage | Size | Reduction |
+|-------|------|-----------|
+| After wasi-sdk compile | 33KB | — |
+| After wasm-opt -Oz | 33KB | ~0% (already optimized) |
+| After --strip-debug | 28KB | 15% |
+| After --strip-producers | **27KB** | **18% total** |
+
+The `-Oz` flag alone doesn't help much since wasi-sdk already optimizes well, but stripping debug info and producer metadata saves ~6KB.
+
 ### The WASI Shim
 
 wasi-sdk's libc (dlmalloc) requires WASI syscalls. For browser use, a minimal shim is needed:
@@ -246,7 +265,7 @@ const { instance } = await WebAssembly.instantiate(wasmBytes,
 | macOS (Mach-O) | 35KB | Stripped, 16KB page alignment |
 | Linux (ELF) | 66KB | Stripped, more metadata |
 | Linux + UPX | **10KB** | Best native size! |
-| **WASM** | **41KB** | Portable, runs in browser |
+| **WASM** | **27KB** | Portable, runs in browser (with wasm-opt) |
 
 ### Trade-offs
 
@@ -256,11 +275,11 @@ const { instance } = await WebAssembly.instantiate(wasmBytes,
 - No recompilation needed per platform
 
 **WASM Disadvantages:**
-- Larger than UPX-compressed Linux (41KB vs 10KB)
+- Larger than UPX-compressed Linux (27KB vs 10KB)
 - Requires WASI shim for browser
 - Slightly slower than native (~1.5-2x)
 
-For an interactive blog demo, 41KB is excellent - it loads instantly and runs the same everywhere.
+For an interactive blog demo, 27KB is excellent - it loads instantly and runs the same everywhere.
 
 ## Key Takeaways
 
@@ -290,8 +309,8 @@ The ultra-small build **works brilliantly** - we removed iostream and reduced ac
 | Target | Size | Use Case |
 |--------|------|----------|
 | Linux + UPX | **10KB** | Smallest native binary |
+| **WASM + wasm-opt** | **27KB** | Browser/portable |
 | macOS | 35KB | Development machine |
-| **WASM** | **41KB** | Browser/portable |
 | Linux (ELF) | 66KB | Uncompressed native |
 
 **Key findings:**
