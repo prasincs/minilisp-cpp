@@ -78,8 +78,12 @@ struct SExpr {
 constexpr void p_assert(bool cond, const char* msg) {
     if (!cond) {
         // At compile-time, this fails compilation.
-        // At runtime, this throws an exception.
-        throw std::runtime_error(msg); 
+        // At runtime, this throws an exception (or traps for WASM).
+#ifdef WASM_BUILD
+        __builtin_trap();
+#else
+        throw std::runtime_error(msg);
+#endif
     }
 }
 
@@ -392,7 +396,7 @@ int read_line_posix(char* buffer, int max_len) {
 long eval_lisp_runtime(std::string_view s) {
     // The MiniLisp::parse and ::eval functions are marked
     // 'constexpr', so they are available at runtime too.
-#ifndef MINIMAL_BUILD
+#if !defined(MINIMAL_BUILD) && !defined(WASM_BUILD)
     try {
         auto ast = MiniLisp::parse(s);
         auto result_sexpr = MiniLisp::eval(ast);
@@ -409,7 +413,7 @@ long eval_lisp_runtime(std::string_view s) {
         return 0; // Or some error code
     }
 #else
-    // Minimal build: no exception handling
+    // Minimal/WASM build: no exception handling
     auto ast = MiniLisp::parse(s);
     auto result_sexpr = MiniLisp::eval(ast);
 
@@ -421,6 +425,7 @@ long eval_lisp_runtime(std::string_view s) {
 }
 
 
+#ifndef WASM_BUILD
 // 4. Main function to prove it works
 int main() {
     // --- COMPILE-TIME Evaluation ---
@@ -497,3 +502,4 @@ int main() {
 
     return 0;
 }
+#endif // WASM_BUILD

@@ -13,6 +13,7 @@ lisp_repl_*
 *.dylib
 *.so
 *.a
+*.wasm
 
 # Debug symbols
 *.dSYM/

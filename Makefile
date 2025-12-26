@@ -10,6 +10,12 @@ DEBUGFLAGS := -g -O0
 SMALLFLAGS := -std=c++20 -Os -flto -ffunction-sections -fdata-sections
 ULTRAFLAGS := -std=c++20 -Os -flto -DMINIMAL_BUILD -fno-rtti -ffunction-sections -fdata-sections
 
+# WASM settings (wasi-sdk)
+WASI_SDK_PATH ?= /opt/wasi-sdk
+WASMCXX := $(WASI_SDK_PATH)/bin/clang++
+WASMFLAGS := -std=c++20 -Os -fno-exceptions \
+             -Wl,--no-entry -Wl,--export-dynamic
+
 # Platform-specific linker flags
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
@@ -71,6 +77,19 @@ ultra-small:
 		echo "Note: Install UPX on Linux for additional compression (~10KB)"; \
 	fi
 
+# Build WebAssembly module (wasi-sdk)
+.PHONY: wasm
+wasm:
+	@test -x $(WASMCXX) || { echo "Error: wasi-sdk not found at $(WASI_SDK_PATH)"; exit 1; }
+	$(WASMCXX) $(WASMFLAGS) -o lisp.wasm wasm.cpp
+	@ls -lh lisp.wasm | awk '{print "WASM size: " $$5}'
+
+# Serve the WASM demo locally
+.PHONY: serve
+serve: wasm
+	@echo "Serving at http://localhost:8000"
+	python3 -m http.server 8000
+
 # Run the REPL
 .PHONY: run
 run: $(TARGET)
@@ -86,7 +105,7 @@ test: $(TARGET)
 # Clean build artifacts
 .PHONY: clean
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) lisp.wasm
 	@echo "Clean complete!"
 
 # Display compiler and environment info
@@ -107,6 +126,8 @@ help:
 	@echo "  make              - Build the project (default, ~39KB, portable)"
 	@echo "  make small        - Size-optimized build (~18-22KB, portable, LTO)"
 	@echo "  make ultra-small  - Ultra-minimal build (~6-8KB w/UPX, POSIX-only)"
+	@echo "  make wasm         - WebAssembly build (wasi-sdk)"
+	@echo "  make serve        - Build WASM and serve demo at localhost:8000"
 	@echo "  make debug        - Build with debug symbols"
 	@echo "  make run          - Build and run the REPL"
 	@echo "  make test         - Build and run compile-time tests"

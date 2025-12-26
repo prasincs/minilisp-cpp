@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MiniLisp WASM</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 600px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        h1 { color: #7f5af0; margin-bottom: 0.5rem; }
+        .subtitle { color: #888; margin-bottom: 2rem; }
+        .input-row {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        input {
+            flex: 1;
+            padding: 0.75rem;
+            font-size: 1rem;
+            font-family: 'SF Mono', Consolas, monospace;
+            background: #16161a;
+            border: 1px solid #333;
+            color: #eee;
+            border-radius: 4px;
+        }
+        input:focus { outline: none; border-color: #7f5af0; }
+        button {
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            background: #7f5af0;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover { background: #6b46e5; }
+        button:disabled { background: #444; cursor: not-allowed; }
+        #output {
+            background: #16161a;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 1rem;
+            font-family: 'SF Mono', Consolas, monospace;
+            min-height: 200px;
+            white-space: pre-wrap;
+        }
+        .result { color: #2cb67d; }
+        .error { color: #e53170; }
+        .examples {
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid #333;
+        }
+        .examples h3 { color: #888; font-size: 0.9rem; }
+        .example {
+            display: inline-block;
+            background: #16161a;
+            padding: 0.25rem 0.5rem;
+            margin: 0.25rem;
+            border-radius: 4px;
+            font-family: 'SF Mono', Consolas, monospace;
+            font-size: 0.85rem;
+            cursor: pointer;
+            border: 1px solid #333;
+        }
+        .example:hover { border-color: #7f5af0; }
+        .size { color: #666; font-size: 0.8rem; margin-top: 2rem; }
+    </style>
+</head>
+<body>
+    <h1>MiniLisp</h1>
+    <p class="subtitle">A Lisp interpreter compiled to WebAssembly</p>
+
+    <div class="input-row">
+        <input type="text" id="input" placeholder="(+ 1 2 3)" autofocus>
+        <button id="evalBtn" disabled>Eval</button>
+    </div>
+
+    <div id="output">Loading WASM...</div>
+
+    <div class="examples">
+        <h3>Try these:</h3>
+        <span class="example">(+ 1 2 3)</span>
+        <span class="example">(* 6 7)</span>
+        <span class="example">(- 100 (* 2 (+ 10 20)))</span>
+        <span class="example">(/ 42 6)</span>
+        <span class="example">(car '(1 2 3))</span>
+        <span class="example">(car (cdr '(10 20 30)))</span>
+        <span class="example">(+ (car '(10 5)) (car (cdr '(3 20))))</span>
+    </div>
+
+    <p class="size" id="size"></p>
+
+    <script>
+        const wasi = {
+            args_get: () => 0,
+            args_sizes_get: () => 0,
+            proc_exit: () => {},
+            fd_write: () => 0,
+            fd_read: () => 0,
+            fd_close: () => 0,
+            fd_seek: () => 0,
+            fd_fdstat_get: () => 0,
+            environ_sizes_get: () => 0,
+            environ_get: () => 0,
+            clock_time_get: () => 0,
+        };
+
+        let lispEval, memory;
+        const output = document.getElementById('output');
+        const input = document.getElementById('input');
+        const evalBtn = document.getElementById('evalBtn');
+        const sizeEl = document.getElementById('size');
+
+        function evalLisp(code) {
+            const bytes = new TextEncoder().encode(code + '\0');
+            new Uint8Array(memory.buffer, 1024, bytes.length).set(bytes);
+            return lispEval(1024);
+        }
+
+        function runEval() {
+            const code = input.value.trim();
+            if (!code) return;
+
+            try {
+                const result = evalLisp(code);
+                output.innerHTML += `<span class="result">&gt; ${code}\n${result}\n\n</span>`;
+            } catch (e) {
+                output.innerHTML += `<span class="error">&gt; ${code}\nError: ${e.message}\n\n</span>`;
+            }
+            output.scrollTop = output.scrollHeight;
+            input.value = '';
+            input.focus();
+        }
+
+        // Load WASM
+        fetch('lisp.wasm')
+            .then(r => {
+                sizeEl.textContent = `WASM size: ${(r.headers.get('content-length') / 1024).toFixed(1)} KB`;
+                return r.arrayBuffer();
+            })
+            .then(bytes => WebAssembly.instantiate(bytes, { wasi_snapshot_preview1: wasi }))
+            .then(({ instance }) => {
+                memory = instance.exports.memory;
+                lispEval = instance.exports.eval;
+                output.textContent = '';
+                evalBtn.disabled = false;
+                input.focus();
+            })
+            .catch(e => {
+                output.innerHTML = `<span class="error">Failed to load WASM: ${e.message}</span>`;
+            });
+
+        evalBtn.addEventListener('click', runEval);
+        input.addEventListener('keydown', e => { if (e.key === 'Enter') runEval(); });
+
+        document.querySelectorAll('.example').forEach(el => {
+            el.addEventListener('click', () => {
+                input.value = el.textContent;
+                runEval();
+            });
+        });
+    </script>
+</body>
+</html>
