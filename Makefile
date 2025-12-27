@@ -109,6 +109,12 @@ test: $(TARGET)
 	./$(TARGET) < /dev/null
 	@echo "All tests passed!"
 
+# Test WASM build with Node.js
+.PHONY: test-wasm
+test-wasm: wasm
+	@echo "Running WASM tests with Node.js..."
+	node test_wasm.js
+
 # Clean build artifacts
 .PHONY: clean
 clean:
@@ -139,6 +145,7 @@ help:
 	@echo "  make debug        - Build with debug symbols"
 	@echo "  make run          - Build and run the REPL"
 	@echo "  make test         - Build and run compile-time tests"
+	@echo "  make test-wasm    - Build WASM and run Node.js test suite"
 	@echo "  make clean        - Remove build artifacts"
 	@echo "  make info         - Display compiler information"
 	@echo "  make help         - Show this help message"

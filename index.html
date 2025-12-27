@@ -8,20 +8,21 @@
         * { box-sizing: border-box; }
         body {
             font-family: system-ui, -apple-system, sans-serif;
-            max-width: 600px;
+            max-width: 700px;
             margin: 2rem auto;
             padding: 0 1rem;
             background: #1a1a2e;
             color: #eee;
         }
         h1 { color: #7f5af0; margin-bottom: 0.5rem; }
-        .subtitle { color: #888; margin-bottom: 2rem; }
+        .subtitle { color: #888; margin-bottom: 0.5rem; }
         .input-row {
             display: flex;
             gap: 0.5rem;
             margin-bottom: 1rem;
+            align-items: flex-start;
         }
-        input {
+        #input {
             flex: 1;
             padding: 0.75rem;
             font-size: 1rem;
@@ -30,8 +31,12 @@
             border: 1px solid #333;
             color: #eee;
             border-radius: 4px;
+            resize: vertical;
+            min-height: 2.5rem;
+            max-height: 300px;
+            field-sizing: content;
         }
-        input:focus { outline: none; border-color: #7f5af0; }
+        #input:focus { outline: none; border-color: #7f5af0; }
         button {
             padding: 0.75rem 1.5rem;
             font-size: 1rem;
@@ -43,6 +48,7 @@
         }
         button:hover { background: #6b46e5; }
         button:disabled { background: #444; cursor: not-allowed; }
+        .shortcut { opacity: 0.6; font-size: 0.85em; margin-left: 0.25rem; }
         #output {
             background: #16161a;
             border: 1px solid #333;
@@ -50,16 +56,19 @@
             padding: 1rem;
             font-family: 'SF Mono', Consolas, monospace;
             min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
             white-space: pre-wrap;
         }
         .result { color: #2cb67d; }
         .error { color: #e53170; }
+        .info { color: #7f5af0; }
         .examples {
             margin-top: 2rem;
             padding-top: 1rem;
             border-top: 1px solid #333;
         }
-        .examples h3 { color: #888; font-size: 0.9rem; }
+        .examples h3 { color: #888; font-size: 0.9rem; margin-bottom: 0.5rem; }
         .example {
             display: inline-block;
             background: #16161a;
@@ -72,34 +81,119 @@
             border: 1px solid #333;
         }
         .example:hover { border-color: #7f5af0; }
-        .size { color: #666; font-size: 0.8rem; margin-top: 2rem; }
+        .size { color: #666; font-size: 0.8rem; margin: 0.25rem 0; }
+        .stats { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+        .buffer-bar {
+            width: 100px;
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .buffer-fill {
+            height: 100%;
+            background: #2cb67d;
+            transition: width 0.2s;
+        }
+
+        /* Function management UI */
+        .functions {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: #16161a;
+            border: 1px solid #333;
+            border-radius: 4px;
+        }
+        .functions h3 {
+            color: #888;
+            font-size: 0.9rem;
+            margin: 0 0 0.75rem 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .fn-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .fn-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            background: #252530;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-family: 'SF Mono', Consolas, monospace;
+            font-size: 0.85rem;
+            color: #2cb67d;
+        }
+        .fn-delete {
+            background: none;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            padding: 0 0.25rem;
+            font-size: 1rem;
+            line-height: 1;
+        }
+        .fn-delete:hover { color: #e53170; }
+        .small-btn {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            background: #333;
+        }
+        .small-btn:hover { background: #444; }
+        .empty-msg { color: #666; font-style: italic; font-size: 0.85rem; }
     </style>
 </head>
 <body>
     <h1>MiniLisp</h1>
-    <p class="subtitle">A Lisp interpreter compiled to WebAssembly</p>
+    <p class="subtitle">A Lisp interpreter compiled to WebAssembly with runtime function definitions</p>
+    <p class="size" id="size"></p>
+    <div class="size stats" id="bufferInfo" style="margin-bottom: 1.5rem;"></div>
 
     <div class="input-row">
-        <input type="text" id="input" placeholder="(+ 1 2 3)" autofocus>
-        <button id="evalBtn" disabled>Eval</button>
+        <textarea id="input" placeholder="(+ 1 2 3)" rows="1" autofocus></textarea>
+        <button id="evalBtn" disabled>Eval <span class="shortcut">⌘↵</span></button>
     </div>
 
     <div id="output">Loading WASM...</div>
 
+    <div class="functions" id="functionsPanel">
+        <h3>
+            <span>Saved Functions</span>
+            <button id="clearBtn" class="small-btn" style="display:none;">Clear All</button>
+        </h3>
+        <div class="fn-list" id="fnList">
+            <span class="empty-msg">No functions defined yet</span>
+        </div>
+    </div>
+
     <div class="examples">
-        <h3>Try these:</h3>
+        <h3>Built-in operations:</h3>
         <span class="example">(+ 1 2 3)</span>
         <span class="example">(* 6 7)</span>
         <span class="example">(- 100 (* 2 (+ 10 20)))</span>
         <span class="example">(/ 42 6)</span>
         <span class="example">(car '(1 2 3))</span>
-        <span class="example">(car (cdr '(10 20 30)))</span>
-        <span class="example">(+ (car '(10 5)) (car (cdr '(3 20))))</span>
+        <span class="example">(< 5 10)</span>
+        <span class="example">(if (< 5 10) 1 0)</span>
     </div>
 
-    <p class="size" id="size"></p>
+    <div class="examples">
+        <h3>Define functions (saved to localStorage):</h3>
+        <span class="example">(defun square (x) (* x x))</span>
+        <span class="example">(square 7)</span>
+        <span class="example">(defun abs (x) (if (< x 0) (- 0 x) x))</span>
+        <span class="example">(abs -42)</span>
+        <span class="example">(defun factorial (n) (if (< n 2) 1 (* n (factorial (- n 1)))))</span>
+        <span class="example">(factorial 6)</span>
+    </div>
 
     <script>
+        const STORAGE_KEY = 'minilisp_functions';
+
         const wasi = {
             args_get: () => 0,
             args_sizes_get: () => 0,
@@ -114,16 +208,123 @@
             clock_time_get: () => 0,
         };
 
-        let lispEval, memory;
+        let lispEval, lispResetEnv, memory, bufferOffset = 65536;
         const output = document.getElementById('output');
         const input = document.getElementById('input');
         const evalBtn = document.getElementById('evalBtn');
         const sizeEl = document.getElementById('size');
+        const bufferInfoEl = document.getElementById('bufferInfo');
+        const fnList = document.getElementById('fnList');
+        const clearBtn = document.getElementById('clearBtn');
+
+        // localStorage functions
+        function getStoredFunctions() {
+            return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+        }
+
+        function saveFunctionDef(code) {
+            const match = code.match(/\(defun\s+(\S+)/);
+            if (!match) return;
+
+            const name = match[1];
+            const stored = getStoredFunctions();
+            const idx = stored.findIndex(d => d.name === name);
+
+            if (idx >= 0) {
+                stored[idx].code = code;
+            } else {
+                stored.push({ name, code });
+            }
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+            updateFunctionList();
+        }
+
+        function deleteFunctionDef(name) {
+            const stored = getStoredFunctions().filter(d => d.name !== name);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+            updateFunctionList();
+            // Note: The function is still in WASM memory until page reload
+            output.innerHTML += `<span class="info">; Removed '${name}' from storage (reload to clear from memory)\n\n</span>`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function clearStoredFunctions() {
+            localStorage.removeItem(STORAGE_KEY);
+            if (lispResetEnv) lispResetEnv();
+            updateFunctionList();
+            output.innerHTML += `<span class="info">; Cleared all functions\n\n</span>`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function loadStoredFunctions() {
+            const stored = getStoredFunctions();
+            if (stored.length === 0) return;
+
+            output.innerHTML += `<span class="info">; Loading ${stored.length} saved function(s)...\n</span>`;
+            for (const { name, code } of stored) {
+                try {
+                    evalLisp(code);
+                    output.innerHTML += `<span class="info">;   ${name}\n</span>`;
+                } catch (e) {
+                    output.innerHTML += `<span class="error">;   ${name} - failed: ${e.message}\n</span>`;
+                }
+            }
+            output.innerHTML += '\n';
+            updateFunctionList();
+        }
+
+        function updateFunctionList() {
+            const stored = getStoredFunctions();
+            if (stored.length === 0) {
+                fnList.innerHTML = '<span class="empty-msg">No functions defined yet</span>';
+                clearBtn.style.display = 'none';
+                return;
+            }
+
+            fnList.innerHTML = stored.map(({ name }) => `
+                <span class="fn-item">
+                    ${name}
+                    <button class="fn-delete" data-name="${name}" title="Delete">&times;</button>
+                </span>
+            `).join('');
+            clearBtn.style.display = 'inline-block';
+
+            // Add delete handlers
+            fnList.querySelectorAll('.fn-delete').forEach(btn => {
+                btn.addEventListener('click', () => deleteFunctionDef(btn.dataset.name));
+            });
+        }
 
         function evalLisp(code) {
             const bytes = new TextEncoder().encode(code + '\0');
-            new Uint8Array(memory.buffer, 1024, bytes.length).set(bytes);
-            return lispEval(1024);
+            new Uint8Array(memory.buffer, bufferOffset, bytes.length).set(bytes);
+            return lispEval(bufferOffset);
+        }
+
+        let wasmInstance = null;
+
+        function updateBufferInfo() {
+            if (!wasmInstance) return;
+            const e = wasmInstance.exports;
+            const inputLen = e.last_input_len ? e.last_input_len() : 0;
+            const totalMem = memory.buffer.byteLength;
+            const available = totalMem - bufferOffset;
+            const pct = Math.min((inputLen / available) * 100, 100);
+            const symCount = e.sym_count ? e.sym_count() : 0;
+            const fnCount = e.fn_count ? e.fn_count() : 0;
+
+            // Color based on usage
+            let color = '#2cb67d';  // green
+            if (pct > 50) color = '#f0a500';  // yellow
+            if (pct > 90) color = '#e53170';  // red
+
+            bufferInfoEl.innerHTML = `
+                <span>Buffer: <strong>${inputLen} B</strong> / ${(available/1024).toFixed(0)} KB</span>
+                <div class="buffer-bar"><div class="buffer-fill" style="width:${pct}%;background:${color}"></div></div>
+                <span>Memory: ${(totalMem/1024).toFixed(0)} KB</span>
+                <span>Symbols: ${symCount}</span>
+                <span>Functions: ${fnCount}</span>
+            `;
         }
 
         function runEval() {
@@ -132,9 +333,20 @@
 
             try {
                 const result = evalLisp(code);
-                output.innerHTML += `<span class="result">&gt; ${code}\n${result}\n\n</span>`;
+                const isDefun = code.trim().startsWith('(defun');
+
+                if (isDefun) {
+                    saveFunctionDef(code);
+                    output.innerHTML += `<span class="result">&gt; ${code}\n; defined\n\n</span>`;
+                } else {
+                    output.innerHTML += `<span class="result">&gt; ${code}\n${result}\n\n</span>`;
+                }
             } catch (e) {
                 output.innerHTML += `<span class="error">&gt; ${code}\nError: ${e.message}\n\n</span>`;
+                // WASM traps (like stack overflow) corrupt the instance - need reload
+                if (e.message.includes('memory access') || e.message.includes('unreachable')) {
+                    output.innerHTML += `<span class="error">⚠️ WASM crashed - <a href="#" onclick="location.reload();return false;" style="color:#7f5af0">reload page</a> to recover\n\n</span>`;
+                }
             }
             output.scrollTop = output.scrollHeight;
             input.value = '';
@@ -149,9 +361,21 @@
             })
             .then(bytes => WebAssembly.instantiate(bytes, { wasi_snapshot_preview1: wasi }))
             .then(({ instance }) => {
+                wasmInstance = instance;
                 memory = instance.exports.memory;
                 lispEval = instance.exports.eval;
+                lispResetEnv = instance.exports.reset_env;
+                // Get safe buffer offset from WASM (avoids data section overlap)
+                if (instance.exports.get_buffer_offset) {
+                    bufferOffset = instance.exports.get_buffer_offset();
+                }
                 output.textContent = '';
+
+                loadStoredFunctions();
+
+                // Auto-update stats every 200ms
+                setInterval(updateBufferInfo, 200);
+
                 evalBtn.disabled = false;
                 input.focus();
             })
@@ -160,7 +384,14 @@
             });
 
         evalBtn.addEventListener('click', runEval);
-        input.addEventListener('keydown', e => { if (e.key === 'Enter') runEval(); });
+        input.addEventListener('keydown', e => {
+            // Ctrl+Enter or Shift+Enter to eval (Enter alone adds newline)
+            if (e.key === 'Enter' && (e.ctrlKey || e.shiftKey || e.metaKey)) {
+                e.preventDefault();
+                runEval();
+            }
+        });
+        clearBtn.addEventListener('click', clearStoredFunctions);
 
         document.querySelectorAll('.example').forEach(el => {
             el.addEventListener('click', () => {
@@ -168,6 +399,13 @@
                 runEval();
             });
         });
+
+        // Initialize function list on page load
+        updateFunctionList();
+
+        // Show platform-appropriate shortcut
+        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+        document.querySelector('.shortcut').textContent = isMac ? '⌘↵' : 'Ctrl+↵';
     </script>
 </body>
 </html>
